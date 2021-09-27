@@ -36,6 +36,7 @@ describe("StakingToken", function () {
   it("Should take the rewards of 2 customers", () => new Promise(async (resolve0, reject0) => {
     // 1st customer: 200 * (1000 / (1000 + 4000)) = 40
     // 2nd customer: 200 * (4000 / (1000 + 4000)) + 300 * 100% = 460
+    // bank: 1000 - 40 - 460 = 500
 
     const [owner, customer1, customer2] = await ethers.getSigners();
 
@@ -61,7 +62,15 @@ describe("StakingToken", function () {
       resolve();
     }, TIME_UNIT * 1000 * 3));
 
-    await Promise.all([p1, p2, p3]);
+    const p4 = new Promise((resolve, reject) => setTimeout(async () => {
+      const withdrawTx = await stakingToken.connect(owner).withdraw();
+      await withdrawTx.wait();
+      const balance = await stakingToken.balanceOf(owner.address);
+      expect(balance).to.equal(SUPPLY.sub(4000).sub(1000).add(500));
+      resolve();
+    }, TIME_UNIT * 1000 * 4));
+
+    await Promise.all([p1, p2, p3, p4]);
     resolve0();
   }));
 });

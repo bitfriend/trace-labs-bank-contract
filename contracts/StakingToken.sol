@@ -24,6 +24,11 @@ contract StakingToken is ERC20, Ownable {
     mapping(address => uint256) internal stakes;
 
     /**
+     * @notice The accumulated rewards for each stakeholder.
+     */
+    mapping(address => uint256) internal rewards;
+
+    /**
      * @notice The period that each stakeholder was rewarded.
      */
     mapping(address => uint8) internal rewardedPeriods;
@@ -52,7 +57,24 @@ contract StakingToken is ERC20, Ownable {
     }
 
     function withdraw() public {
-        require(block.timestamp >= epoch.add(timeUnit.mul(2)), "Withdraw time is not started");
+        if (msg.sender == owner()) {
+            withdrawFromOwner();
+        } else {
+            withdrawFromCustomer();
+        }
+    }
+
+    function withdrawFromOwner() private {
+        require(block.timestamp >= epoch.add(timeUnit.mul(4)), "Withdraw time of owner is not started");
+
+        uint256 totalStaked = totalStakes(0);
+        uint256 totalRewarded = totalStaked.mul(20).div(100);
+
+        _mint(msg.sender, totalRewarded.sub(totalRewards()));
+    }
+
+    function withdrawFromCustomer() private {
+        require(block.timestamp >= epoch.add(timeUnit.mul(2)), "Withdraw time of customer is not started");
 
         uint8 currentPeriod = 0;
         if (block.timestamp >= epoch.add(timeUnit.mul(4))) { // Reward3 period
@@ -64,29 +86,30 @@ contract StakingToken is ERC20, Ownable {
         }
 
         uint256 totalStaked = totalStakes(0);
-        uint256 totalRewards = totalStaked.mul(20).div(100);
-        uint256 firstRewards = totalRewards.mul(20).div(100);
-        uint256 secondRewards = totalRewards.mul(30).div(100);
-        uint256 thirdRewards = totalRewards.mul(50).div(100);
+        uint256 totalRewarded = totalStaked.mul(20).div(100);
+        uint256 firstRewarded = totalRewarded.mul(20).div(100);
+        uint256 secondRewarded = totalRewarded.mul(30).div(100);
+        uint256 thirdRewarded = totalRewarded.mul(50).div(100);
 
         uint256 staked = stakeOf(msg.sender);
         uint256 rewarded = 0;
 
         if (block.timestamp >= epoch.add(timeUnit.mul(4))) { // Reward3 period
             uint256 aliveStaked = totalStakes(3);
-            rewarded = rewarded.add(thirdRewards.mul(staked).div(aliveStaked));
+            rewarded = rewarded.add(thirdRewarded.mul(staked).div(aliveStaked));
         }
         if (block.timestamp >= epoch.add(timeUnit.mul(3))) { // Reward2 period
             uint256 aliveStaked = totalStakes(2);
-            rewarded = rewarded.add(secondRewards.mul(staked).div(aliveStaked));
+            rewarded = rewarded.add(secondRewarded.mul(staked).div(aliveStaked));
         }
         if (block.timestamp >= epoch.add(timeUnit.mul(2))) { // Reward1 period
             uint256 aliveStaked = totalStakes(1);
-            rewarded = rewarded.add(firstRewards.mul(staked).div(aliveStaked));
+            rewarded = rewarded.add(firstRewarded.mul(staked).div(aliveStaked));
         }
 
+        rewards[msg.sender] = rewarded;
         rewardedPeriods[msg.sender] = currentPeriod;
-        _mint(msg.sender, staked + rewarded);
+        _mint(msg.sender, staked.add(rewarded));
     }
 
     // ---------- STAKES ----------
@@ -180,5 +203,20 @@ contract StakingToken is ERC20, Ownable {
             stakeholders[s] = stakeholders[stakeholders.length - 1];
             stakeholders.pop();
         }
+    }
+
+    // ---------- REWARDS ----------
+
+    /**
+     * @notice A method to the aggregated rewards from all stakeholders.
+     * @return uint256 The aggregated rewards from all stakeholders.
+     */
+    function totalRewards() private view returns (uint256) {
+        uint256 _totalRewards = 0;
+        for (uint256 i = 0; i < stakeholders.length; i += 1) {
+            address stakeholder = stakeholders[i];
+            _totalRewards = _totalRewards.add(rewards[stakeholder]);
+        }
+        return _totalRewards;
     }
 }
